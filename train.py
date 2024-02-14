@@ -1,6 +1,6 @@
 
 from os import path
-from typing import Tuple
+from typing import Tuple, Union
 
 import pandas as pd
 from numpy.typing import ArrayLike
@@ -10,31 +10,39 @@ from sklearn.pipeline import Pipeline
 from sklearn.compose import ColumnTransformer
 from sklearn.impute import SimpleImputer
 from sklearn.linear_model import LogisticRegression
+from sklearn.tree import DecisionTreeClassifier
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
-from sklearn.base import ClassifierMixin
 import joblib
 
 
-ORIGINAL_DATA_PATH = 'data/train.csv'
-PREPROCESSED_DATA_PATH = 'data/preprocessed.pkl'
-MODEL_PATH = 'weights/classifier.pkl'
+ORIGINAL_TRAIN_PATH = 'data/train.csv'
+PROCESSED_TRAIN_PATH = 'features/train_preprocessed.pkl'
+ORIGINAL_TEST_PATH = 'data/test.csv'
+PROCESSED_TEST_PATH = 'features/test_preprocessed.pkl'
+MODEL_PATH = 'models/classifier.pkl'
+
+
+ModelType = Union[ 
+  LogisticRegression, 
+  DecisionTreeClassifier
+]
 
 
 def load_data(path: str, dropna: bool = False) -> Tuple[pd.DataFrame, pd.Series]:
-  df_train = pd.read_csv(path, na_values='?')
+  df = pd.read_csv(path, na_values='?')
 
   if dropna:
-    df_train = df_train.dropna()
+    df = df.dropna()
     
-  X = df_train.drop(['id', 'is_rich'], axis=1)
-  y = df_train['is_rich']
+  X = df.drop(['id', 'is_rich'], axis=1)
+  y = df['is_rich']
     
   return X, y
 
 
-def preprocess(X: pd.DataFrame):
-  print('preprocerssing original data...')
+def preprocess(X: pd.DataFrame, tag: str):
+  print(f'preprocerssing original {tag} data...\n')
 
   categorical = X.select_dtypes(include=['object', 'bool']).columns
   numerical = X.select_dtypes(include=['int64', 'float64']).columns
@@ -52,41 +60,57 @@ def preprocess(X: pd.DataFrame):
   ])
 
   return transformer.fit_transform(X)
+
+
+def get_data(orig_path: str, proc_path: str, tag: str):
+  if path.exists(proc_path):
+    print(f'loading preprocessed {tag} data...\n')
+    X, y = joblib.load(proc_path)
+  else:
+    X, y = load_data(orig_path)
+    X = preprocess(X, tag)
+    joblib.dump((X, y), proc_path)
+  
+  return X, y
  
 
-def print_metrics(y1: ArrayLike, y2: ArrayLike):
-  accuracy = accuracy_score(y1, y2)
-  precision = precision_score(y1, y2)
-  recall = recall_score(y1, y2)
-  f_score=f1_score(y1, y2)
-  print(f'accuracy: {accuracy}')
-  print(f'precision: {precision}')
-  print(f'recall: {recall}')
-  print(f'f1_score: {f_score}')
+def validate_model(
+    model: ModelType, 
+    X: ArrayLike, 
+    y_true: ArrayLike, 
+    tag: str
+    ):
+  
+  y_pred = model.predict(X)
+
+  accuracy = accuracy_score(y_pred, y_true)
+  precision = precision_score(y_pred, y_true)
+  recall = recall_score(y_pred, y_true)
+  f_score=f1_score(y_pred, y_true)
+  print(f'{tag} accuracy: {accuracy}')
+  print(f'{tag} precision: {precision}')
+  print(f'{tag} recall: {recall}')
+  print(f'{tag} f1_score: {f_score}')
+  print('\n')
 
 
-def train_model(X, y) -> ClassifierMixin:
-  X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+def train_model(X, y) -> ModelType:
+  X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.2, random_state=42)
   
   model = LogisticRegression(max_iter=1_000)
   model.fit(X_train, y_train)
-
-  y_pred = model.predict(X_test)
-  print_metrics(y_test, y_pred)
-
+  validate_model(model, X_val, y_val, 'train')
+  
   return model
 
 def run():
-  if path.exists(PREPROCESSED_DATA_PATH):
-    print('loading preprocessed data...')
-    X, y = joblib.load(PREPROCESSED_DATA_PATH)
-  else:
-    X, y = load_data(ORIGINAL_DATA_PATH)
-    X = preprocess(X)
-    joblib.dump((X, y), PREPROCESSED_DATA_PATH)
+  X, y = get_data(ORIGINAL_TRAIN_PATH, PROCESSED_TRAIN_PATH, 'train')
   
   model = train_model(X, y)
   joblib.dump(model, MODEL_PATH)
+
+  X_test, y_test = get_data(ORIGINAL_TEST_PATH, PROCESSED_TEST_PATH, 'test')
+  validate_model(model, X_test, y_test, 'test') # type: ignore
 
 
 if __name__ == '__main__':
