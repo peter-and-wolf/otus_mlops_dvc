@@ -1,0 +1,5 @@
+[core]
+    remote = myremote
+['remote "myremote"']
+    url = s3://otus-peter-mlops
+    endpointurl = https://storage.yandexcloud.net

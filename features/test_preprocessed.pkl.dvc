@@ -1,0 +1,5 @@
+outs:
+- md5: 83f7684d5c04d45d4e1f87b160fea2f0
+  size: 1251150
+  hash: md5
+  path: test_preprocessed.pkl
